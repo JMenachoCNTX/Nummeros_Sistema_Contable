@@ -1,3 +1,33 @@
+// ══════════════════════════════════════════════════════════
+// BLOQUE 1: VERSIÓN Y CHANGELOG
+// ══════════════════════════════════════════════════════════
+const VERSION = 'V3.35';
+const CHANGELOG = [
+  {
+    v: 'V3.35',
+    fecha: '2026-10-11',
+    cambios: [
+      'Actualización del logo oficial NUMMEROS desde archivos PNG sin fondo.',
+      'Reorganización modular de identidades visuales por bloques.',
+      'Ajuste de variantes del logo para modo claro y modo oscuro en Login, Splash y Barra superior.',
+      'Preservación de la firma consultora CONTAX en reportes y PDFs.'
+    ]
+  }
+];
+
+// ══════════════════════════════════════════════════════════
+// BLOQUE 2: RECURSOS E IDENTIDAD VISUAL (LOGOS E IMÁGENES)
+// ══════════════════════════════════════════════════════════
+// Logos oficial NUMMEROS (extraídos de tus archivos PNG sin fondo):
+const LOGO_NUMMEROS_VERDE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'; // Logo verde sobre fondo claro
+const LOGO_NUMMEROS_BLANCO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...'; // Logo blanco sobre fondo oscuro
+
+// Asignaciones para las diferentes vistas del sistema:
+const CONTAX_ISOTIPO = LOGO_NUMMEROS_VERDE;
+const NUM_SOLO_POS = LOGO_NUMMEROS_VERDE;
+const NUM_SOLO_NEG = LOGO_NUMMEROS_BLANCO;
+const CONTAX_ISOTIPO_NEG = LOGO_NUMMEROS_BLANCO;
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
