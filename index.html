@@ -149,27 +149,28 @@ input.g:focus{border-color:#059669!important;box-shadow:0 0 0 2px rgba(16,185,12
 .nav.collapsed .nav-link:hover .nav-lb{opacity:1;transform:translateY(-50%) translateX(2px)}
 
 /* ══ DARK MODE ══════════════════════════════════════ */
-body.dark-mode{background:#000000!important;color:#E2E8F0!important}
-body.dark-mode .hdr{background:#051F20!important}
+body.dark-mode{background:#04231F!important;color:#E6F0EA!important}
+body.dark-mode .hdr{background:#051F20!important;border-bottom-color:#0B2B26!important}
 body.dark-mode .nav{background:#0B2B26!important}
-body.dark-mode .nav-link{color:rgba(255,255,255,.75)!important}
-body.dark-mode .nav-link.active,.dark-mode .nav-link:hover{background:rgba(255,255,255,.12)!important}
-body.dark-mode .cnt{background:#000000!important}
-body.dark-mode .card{background:#161616!important;border-color:#2B2B2B!important;color:#E2E8F0!important}
-body.dark-mode table{color:#E2E8F0!important}
-body.dark-mode thead tr{background:#2B2B2B!important}
-body.dark-mode tbody tr:nth-child(even){background:#161616!important}
-body.dark-mode input,body.dark-mode select,body.dark-mode textarea{background:#000000!important;color:#E2E8F0!important;border-color:#2B2B2B!important}
-body.dark-mode label{color:#CBD5E1!important}
-body.dark-mode .info{background:#161616!important;border-color:#2B2B2B!important;color:#CBD5E1!important}
-body.dark-mode .sep{border-color:#2B2B2B!important}
-body.dark-mode .h2,.dark-mode .h3{color:#FFFFFF!important}
-body.dark-mode .tr-g{background:#2B2B2B!important;color:#FFFFFF!important}
-body.dark-mode .tr-t,.dark-mode .tr-f{background:#161616!important}
-body.dark-mode .oa-card{background:#161616!important;border-color:#2B2B2B!important}
-body.dark-mode .auto-card{background:#0D0D0D!important;border-color:#2B2B2B!important}
-body.dark-mode .tbl-wrap{background:#000000!important}
-body.dark-mode .emp-box{background:#161616!important;color:#E2E8F0!important}
+body.dark-mode .nav-link{color:rgba(230,240,234,.72)!important}
+body.dark-mode .nav-link.active,.dark-mode .nav-link:hover{background:rgba(142,182,155,.18)!important}
+body.dark-mode .cnt{background:#04231F!important}
+body.dark-mode .card{background:#0B2B26!important;border-color:#1D4A40!important;color:#E6F0EA!important}
+body.dark-mode table{color:#E6F0EA!important}
+body.dark-mode thead tr{background:#163832!important}
+body.dark-mode tbody tr:nth-child(even){background:#0E3029!important}
+body.dark-mode input,body.dark-mode select,body.dark-mode textarea{background:#0E3029!important;color:#E6F0EA!important;border-color:#235347!important}
+body.dark-mode label{color:#B9D4C6!important}
+body.dark-mode .info{background:#0E3029!important;border-color:#1D4A40!important;color:#C8DED3!important}
+body.dark-mode .sep{border-color:#1D4A40!important}
+body.dark-mode .h2,.dark-mode .h3{color:#DAF1DE!important}
+body.dark-mode .h3{background:#163832!important}
+body.dark-mode .tr-g{background:#163832!important;color:#DAF1DE!important}
+body.dark-mode .tr-t,.dark-mode .tr-f{background:#0E3029!important}
+body.dark-mode .oa-card{background:#0B2B26!important;border-color:#1D4A40!important}
+body.dark-mode .auto-card{background:#0E3029!important;border-color:#1D4A40!important}
+body.dark-mode .tbl-wrap{background:#04231F!important}
+body.dark-mode .emp-box{background:#0B2B26!important;color:#E6F0EA!important}
 </style>
   <!-- Firebase 10.x compat SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -186,8 +187,12 @@ body.dark-mode .emp-box{background:#161616!important;color:#E2E8F0!important}
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.35';
+const VERSION='V3.36';
 const CHANGELOG=[
+  {v:'V3.36', fecha:'2026-10-12', cambios:[
+    'Modo oscuro: ya no usa negro puro — ahora toda la interfaz usa la paleta de verdes de la marca (fondo Verde noche, tarjetas y tablas en verdes profundos, texto en verde claro).',
+    'Modo oscuro automático: si no has elegido manualmente, el sistema sigue el modo oscuro/claro de tu computadora y cambia solo cuando lo cambias en el sistema operativo. Si usas el botón de modo oscuro, se respeta tu elección manual.'
+  ]},
   {v:'V3.35', fecha:'2026-08-11', cambios:[
     'Identidad de marca NUMMEROS (primera pasada, solo en el sistema, no en los PDF): tipografías Akshar (títulos) y Questrial (texto, equivalente a Century Gothic), y la paleta de verdes de la marca en el chrome — encabezado y menú lateral en Verde noche (#051F20), isotipo en Verde NUMMEROS (#235347) y acento del menú activo en Verde salvia (#8EB69B).',
     'Los documentos que se exportan (PDF/Excel) quedan igual por ahora, como se pidió; la marca se aplicará a los PDF en una siguiente etapa.'
@@ -1398,8 +1403,8 @@ let S={tab:'splash',showImportPreview:false,showExport:false,darkMode:false,sub:
 // Load saved plan and apply to S
 if(saved&&saved.planCuentas)S.planCuentas=saved.planCuentas;
 (function(){
-  // Apply saved dark mode
-  if(localStorage.getItem('cx_darkmode')==='1'){S.darkMode=true;document.body.classList.add('dark-mode');}
+  // Modo oscuro: si el usuario eligió manualmente se respeta; si no, se usa el del sistema operativo.
+  (function(){var sv=localStorage.getItem('cx_darkmode');var sys=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);var dk=sv==='1'?true:sv==='0'?false:!!sys;S.darkMode=dk;document.body.classList.toggle('dark-mode',dk);})();
   var empObj=S.empresas.find(function(e){return e.id===S.activeId;});
   if(empObj&&empObj.cfg&&empObj.cfg.planId){
     S.planCuentas=getPlanCuentas(empObj.cfg.planId);
@@ -7423,7 +7428,12 @@ function renderHistorial(){
 
 // ─── Startup ────────────────────────────────────────────
 (function(){
-  if(localStorage.getItem('cx_darkmode')==='1'){S.darkMode=true;document.body.classList.add('dark-mode');}
+  var sv=localStorage.getItem('cx_darkmode');
+  var sys=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var dk=sv==='1'?true:sv==='0'?false:!!sys;
+  S.darkMode=dk;document.body.classList.toggle('dark-mode',dk);
+  // Mientras el usuario no haya elegido manualmente, seguir el modo del sistema en tiempo real.
+  if(window.matchMedia){try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(ev){if(localStorage.getItem('cx_darkmode')==null){S.darkMode=ev.matches;document.body.classList.toggle('dark-mode',ev.matches);if(typeof re==='function')re();}});}catch(e){}}
 })();
 if(typeof initFirebase==='function')initFirebase();
 re();
