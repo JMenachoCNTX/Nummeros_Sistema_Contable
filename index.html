@@ -258,14 +258,10 @@ body.dark-mode .nm-login-card{box-shadow:none}
 .nm-login-pie img{height:18px;width:auto;opacity:.9}
 .nm-login-ver{display:inline-block;background:var(--nm-campo);border:1px solid var(--nm-borde);border-radius:999px;padding:2px 10px;font:600 12px var(--nm-display);color:var(--nm-suave)}
 .nm-login-foto{position:relative;overflow:hidden;background:#E9F3EC;min-height:100vh}
-.nm-login-foto figure{position:absolute;inset:0;margin:0;opacity:0;animation:nmFoto 32s infinite}
-.nm-login-foto figure:nth-child(1){animation-delay:0s}
-.nm-login-foto figure:nth-child(2){animation-delay:8s}
-.nm-login-foto figure:nth-child(3){animation-delay:16s}
-.nm-login-foto figure:nth-child(4){animation-delay:24s}
+.nm-login-foto figure{position:absolute;inset:0;margin:0;opacity:0;transition:opacity 1.2s ease}
+.nm-login-foto figure.on{opacity:1}
 .nm-login-foto img{width:100%;height:100%;object-fit:cover;object-position:62% 30%;display:block}
-@keyframes nmFoto{0%{opacity:0}3%{opacity:1}25%{opacity:1}28%{opacity:0}100%{opacity:0}}
-@media (prefers-reduced-motion:reduce){.nm-login-foto figure{animation:none}.nm-login-foto figure:first-child{opacity:1}}
+@media (prefers-reduced-motion:reduce){.nm-login-foto figure{transition:none}}
 .nm-login-foto figcaption{position:absolute;left:28px;bottom:28px;right:28px;display:flex;flex-direction:column;align-items:flex-start;gap:10px}
 .nm-nombre{display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,.92);color:var(--verde-800);border-radius:999px;padding:7px 16px 7px 8px;font:700 18px var(--nm-display);letter-spacing:.04em;box-shadow:0 6px 18px rgba(5,31,32,.12)}
 .nm-nombre i{width:26px;height:26px;border-radius:50%;background:var(--verde-700);display:grid;place-items:center;flex-shrink:0}
@@ -351,8 +347,13 @@ body.dark-mode svg rect[fill="#163832"],body.dark-mode svg rect[fill="#235347"]{
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.37';
+const VERSION='V3.38';
 const CHANGELOG=[
+  {v:'V3.38', fecha:'2026-10-21', cambios:[
+    'Fotografías: se reemplazaron todas las fotos del sistema por las nuevas versiones oficiales del manual de marca NUMMEROS (13 fotos de Pitágoras, Euclides y Arquímedes, con mejor resolución e iluminación).',
+    'Inicio de sesión: ahora rota entre las 10 fotos claras de la marca (antes 4), una cada 7 segundos y con transición suave. En modo oscuro usa las 2 fotos oscuras (Arquímedes pensando y ¡Eureka!).',
+    'Inicio: la foto cambia cada día entre las 11 fotos claras, incluida la de los tres clásicos reunidos.'
+  ]},
   {v:'V3.37', fecha:'2026-10-13', cambios:[
     'Marca NUMMEROS en todo el sistema: logotipos oficiales (horizontal, apilado, con firma «by CONTAX» y la N), tipografías Akshar y Century Gothic/Questrial incluidas en el sistema, y solo los seis verdes de la marca. Se quitaron el negro, el azul y los campos amarillos.',
     'Nuevo inicio de sesión: fondo claro con el patrón N tono sobre tono, logotipo apilado en Verde NUMMEROS y las fotos de los clásicos (Pitágoras, Euclides y Arquímedes) con su nombre visible. En modo oscuro usa las fotos oscuras.',
@@ -4992,30 +4993,44 @@ function _pinInput(id,type,label,ph,extra){
     '<input id="'+id+'" type="'+type+'" placeholder="'+ph+'" '+(extra||'')+'/></div>';
 }
 // ═══ MARCA NUMMEROS — Fotos de los clásicos para las pantallas de acceso ═══
+var NM_P={nombre:'Pitágoras',rasgo:'Los números del día a día'},NM_E={nombre:'Euclides',rasgo:'El orden'},NM_A={nombre:'Arquímedes',rasgo:'El equilibrio'};
+function nmFoto(arch,per,frase,pos,extra){var o={img:'marca/clasicos/'+arch+'.jpg',nombre:per.nombre,rasgo:per.rasgo,frase:frase,pos:pos||''};for(var k in (extra||{}))o[k]=extra[k];return o;}
+// Fotos oficiales de la marca (los clásicos de los números). Modo claro: fondo menta.
 var NM_CLASICOS=[
-  {img:'marca/clasicos/euclides-laptop.jpg',nombre:'Euclides',rasgo:'El orden',frase:'Sistemas, reportes y procesos bien armados.'},
-  {img:'marca/clasicos/pitagoras-tablet.jpg',nombre:'Pitágoras',rasgo:'Los números del día a día',frase:'Ventas, caja y cobros siempre al día.'},
-  {img:'marca/clasicos/arquimedes-balanza.jpg',nombre:'Arquímedes',rasgo:'El equilibrio',frase:'Cuentas que cuadran, inventario y control.'},
-  {img:'marca/clasicos/pitagoras-celular.jpg',nombre:'Pitágoras',rasgo:'Los números del día a día',frase:'Tus números, desde el celular.'}
+  nmFoto('euclides-laptop',NM_E,'Sistemas, reportes y procesos bien armados.','62% 30%'),
+  nmFoto('pitagoras-tablet',NM_P,'Ventas, caja y cobros siempre al día.','50% 22%'),
+  nmFoto('arquimedes-balanza',NM_A,'Cuentas que cuadran, inventario y control.','45% 25%'),
+  nmFoto('pitagoras-celular',NM_P,'Tus números, desde el celular.','55% 25%'),
+  nmFoto('euclides-lentes',NM_E,'Cada cifra revisada, sin rodeos.','40% 20%'),
+  nmFoto('pitagoras-inventario',NM_P,'Tu inventario, en orden y al día.','55% 25%'),
+  nmFoto('euclides-compas',NM_E,'Reportes que miden el crecimiento.','78% 30%'),
+  nmFoto('arquimedes-cafeteria',NM_A,'Tu negocio vende y el sistema lleva la cuenta.','56% 30%'),
+  nmFoto('pitagoras-senalando',NM_P,'Lo importante, a la vista.','50% 18%'),
+  nmFoto('euclides-caminando',NM_E,'Tu sistema te acompaña a donde vayas.','50% 20%'),
+  nmFoto('los-tres-reunion',{nombre:'Pitágoras, Euclides y Arquímedes',rasgo:'Los clásicos de los números'},'Tus números, en buenas manos.','62% 35%',{soloInicio:true})
 ];
-// En modo oscuro: las fotos de piezas oscuras (fondo verde noche)
+// Modo oscuro: las piezas oscuras de la marca (fondo verde noche)
 var NM_CLASICOS_OSCURO=[
-  {img:'marca/clasicos/arquimedes-pensando.jpg',nombre:'Arquímedes',rasgo:'El equilibrio',frase:'Cuentas que cuadran, inventario y control.'},
-  {img:'marca/clasicos/arquimedes-eureka.jpg',nombre:'Arquímedes',rasgo:'El equilibrio',frase:'¡Eureka! El balance cuadra.',pos:'72% 40%'},
-  {img:'marca/clasicos/arquimedes-pensando.jpg',nombre:'Arquímedes',rasgo:'El equilibrio',frase:'Cuentas que cuadran, inventario y control.'},
-  {img:'marca/clasicos/arquimedes-eureka.jpg',nombre:'Arquímedes',rasgo:'El equilibrio',frase:'¡Eureka! El balance cuadra.',pos:'72% 40%'}
+  nmFoto('arquimedes-pensando',NM_A,'Cuentas que cuadran, inventario y control.','55% 25%'),
+  nmFoto('arquimedes-eureka',NM_A,'¡Eureka! El balance cuadra.','72% 40%')
 ];
 function nmClasicos(){return S.darkMode?NM_CLASICOS_OSCURO:NM_CLASICOS;}
+// Rotación de fotos del inicio de sesión: una foto cada 7 segundos
+if(!window._nmFotoTimer){window._nmFotoTimer=setInterval(function(){
+  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  var fs=document.querySelectorAll('.nm-login-foto figure');if(fs.length<2)return;
+  var i=-1;for(var k=0;k<fs.length;k++){if(fs[k].classList.contains('on')){i=k;break;}}
+  if(i>=0)fs[i].classList.remove('on');fs[(i+1)%fs.length].classList.add('on');
+},7000);}
 function nmNombre(p){
   return '<div class="nm-nombre"><i><img src="'+NUM_ISO_BLANCO+'" alt=""/></i>'+p.nombre+'<span>'+p.rasgo+'</span></div>';
 }
 function nmLoginFotos(){
   return '<aside class="nm-login-foto" aria-label="Pitágoras, Euclides y Arquímedes trabajando con NUMMEROS">'+
-    nmClasicos().map(function(p){
-      return '<figure><img src="'+p.img+'"'+(p.pos?' style="object-position:'+p.pos+'"':'')+' alt="'+p.nombre+', escultura griega de mármol, trabajando con NUMMEROS"/>'+
+    nmClasicos().filter(function(p){return !p.soloInicio;}).map(function(p,i){
+      return '<figure'+(i===0?' class="on"':'')+'><img src="'+p.img+'"'+(p.pos?' style="object-position:'+p.pos+'"':'')+' alt="'+p.nombre+', escultura griega de mármol, trabajando con NUMMEROS"/>'+
         '<figcaption>'+nmNombre(p)+'<div class="nm-frase">'+p.frase+'</div></figcaption></figure>';
     }).join('')+
-    '<div class="nm-login-lema">Sistemas a la medida de tu empresa.<small>NUMMEROS by CONTAX · Sistema Contable</small></div>'+
   '</aside>';
 }
 function nmLogo(claro){return (claro||S.darkMode)?NUM_APILADO_CLARO:NUM_APILADO;}
@@ -6296,7 +6311,7 @@ function renderSplash(){
   const cfg=emp().cfg;const c=calcAll();
   var cu=getCurrentUser&&getCurrentUser();
   var nombre=(cu&&cu.nombre)||getUser();
-  var pila=nmClasicos();var foto=pila[(new Date().getDate())%pila.length];
+  var pila=nmClasicos();var _d=new Date();var foto=pila[(_d.getDate()+_d.getMonth()*31)%pila.length];
   var h=new Date().getHours();var saludo=h<12?'Buenos días':(h<19?'Buenas tardes':'Buenas noches');
   function kpi(lbl,val,neg){return '<div class="nm-kpi"><small>'+lbl+'</small><b'+(neg?' class="neg"':'')+'>'+val+'</b></div>';}
   var kpis=cfg.razonSocial?
@@ -6850,7 +6865,7 @@ function renderCover(){
       (cfg.nit?'<div style="font-size:12px;color:#557363;margin-top:3px">NIT '+cfg.nit+'</div>':'')+
     '</div>'+
     '<div style="position:absolute;right:0;bottom:22mm;width:58%;height:66%;z-index:1">'+
-      '<img src="marca/clasicos/pitagoras-tablet.jpg" style="width:100%;height:100%;object-fit:cover;object-position:50% 20%;display:block;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 22%);mask-image:linear-gradient(90deg,transparent 0,#000 22%)"/>'+
+      '<img src="marca/clasicos/pitagoras-tablet.jpg" style="width:100%;height:100%;object-fit:cover;object-position:50% 20%;display:block;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 22%),linear-gradient(180deg,transparent 0,#000 18%);-webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent 0,#000 22%),linear-gradient(180deg,transparent 0,#000 18%);mask-composite:intersect"/>'+
       '<div style="position:absolute;left:24%;bottom:8mm;background:#fff;color:#163832;border-radius:999px;padding:5px 14px;font:700 13px Akshar,\'Arial Narrow\',sans-serif;letter-spacing:.04em">Pitágoras</div>'+
     '</div>'+
     '<div style="margin-top:auto;height:22mm;background:#235347;color:#DAF1DE;display:flex;align-items:center;justify-content:space-between;padding:0 16mm;position:relative;z-index:2">'+
