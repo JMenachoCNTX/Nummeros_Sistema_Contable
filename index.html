@@ -347,8 +347,14 @@ body.dark-mode svg rect[fill="#163832"],body.dark-mode svg rect[fill="#235347"]{
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.38';
+const VERSION='V3.39';
 const CHANGELOG=[
+  {v:'V3.39', fecha:'2026-10-27', cambios:[
+    'Lista EEFF: nueva vista "Panel NUMMEROS" que muestra automáticamente la lista de Estados Financieros del panel (nummerospanel.contaxbolivia.com) y se actualiza sola cada minuto.',
+    'Desde esa lista se puede cambiar el estado (Pendiente / En proceso / Entregado) y el cambio aparece también en el panel.',
+    'Cada balance muestra si la empresa ya existe en el sistema (por NIT y gestión) con botón para abrirla o crearla con los datos del cliente.',
+    'La vista anterior de Google Sheets (Balance2025) sigue disponible en la misma pestaña.'
+  ]},
   {v:'V3.38', fecha:'2026-10-21', cambios:[
     'Fotografías: se reemplazaron todas las fotos del sistema por las nuevas versiones oficiales del manual de marca NUMMEROS (13 fotos de Pitágoras, Euclides y Arquímedes, con mejor resolución e iluminación).',
     'Inicio de sesión: ahora rota entre las 10 fotos claras de la marca (antes 4), una cada 7 segundos y con transición suave. En modo oscuro usa las 2 fotos oscuras (Arquímedes pensando y ¡Eureka!).',
@@ -4658,7 +4664,115 @@ function gsFilter(){
     tr.style.display=show?'':'none';
   });
 }
+// ═══ LISTA EEFF DESDE EL PANEL NUMMEROS ═══════════════════
+// Lee los Estados Financieros recepcionados en el panel (vía el puente de Apps Script del panel).
+var PANEL_PUENTE='https://script.google.com/macros/s/AKfycbz5vQn78Hmcw_NwIIg0c33WEsmrXrYRgARwlmrJqOjM_h-yz-whXbAeoaqWCdI_3TqK2A/exec';
+function eeffOrigen(){try{return localStorage.getItem('cx_eeff_origen')||'panel';}catch(e){return 'panel';}}
+function setEeffOrigen(o){try{localStorage.setItem('cx_eeff_origen',o);}catch(e){}re();}
+function panelKey(){try{return localStorage.getItem('cx_panel_key')||'';}catch(e){return '';}}
+function panelKeyLoad(){
+  if(S.pkLoaded||!fbDb)return;S.pkLoaded=true;
+  fbDb.collection('contax_config').doc('panel').get().then(function(snap){
+    var k=snap.exists?((snap.data()||{}).key||''):'';
+    if(k&&k!==panelKey()){try{localStorage.setItem('cx_panel_key',k);}catch(e){}S.pnLoaded=false;re();}
+  }).catch(function(){});
+}
+function setPanelKey(){
+  var el=document.getElementById('pn-key');if(!el)return;var k=(el.value||'').trim();
+  try{localStorage.setItem('cx_panel_key',k);}catch(e){}
+  if(fbDb)fbDb.collection('contax_config').doc('panel').set({key:k,actualizado:new Date().toISOString()},{merge:true}).catch(function(){});
+  S.pnLoaded=false;S.pnData=null;S.pnErr='';re();
+}
+function panelApi(datos){
+  datos.key=panelKey();
+  return fetch(PANEL_PUENTE,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(datos)}).then(function(r){return r.json();});
+}
+function loadPanelEEFF(silencioso){
+  if(!panelKey())return;
+  if(!silencioso){S.pnStatus='cargando';re();}
+  panelApi({action:'sis_eeff'}).then(function(d){
+    if(!d||!d.ok){S.pnStatus='error';S.pnErr=(d&&d.error)||'El panel respondió con un error.';re();return;}
+    S.pnData=d.filas||[];S.pnEstados=d.estados||[];S.pnAt=Date.now();S.pnLoaded=true;S.pnStatus='ok';S.pnErr='';
+    if(S.tab==='listaeeff'&&eeffOrigen()==='panel'){var y=(document.getElementById('main-cnt')||{}).scrollTop;re();var mc=document.getElementById('main-cnt');if(mc&&y)mc.scrollTop=y;}
+  }).catch(function(e){S.pnStatus='error';S.pnErr='No se pudo conectar con el panel: '+e.message;re();});
+}
+// Se actualiza solo cada 60 s mientras la pestaña esté abierta
+setInterval(function(){if(S&&S.tab==='listaeeff'&&eeffOrigen()==='panel'&&panelKey()&&S.pnStatus!=='cargando'&&!document.hidden)loadPanelEEFF(true);},60000);
+function panelCambiarEstado(id,est){
+  var r=(S.pnData||[]).find(function(x){return x.id===id;});var ant=r?r.estado:'';
+  if(r)r.estado=est;re();
+  var cu=(typeof getCurrentUser==='function')?getCurrentUser():null;
+  panelApi({action:'sis_estado',id:id,estado:est,por:(cu&&(cu.nombre||cu.email))||''}).then(function(d){
+    if(!d||!d.ok){if(r)r.estado=ant;re();alert((d&&d.error)||'No se pudo guardar el estado.');return;}
+    if(typeof showNotif==='function')showNotif('Estado actualizado también en el panel');
+  }).catch(function(){if(r)r.estado=ant;re();alert('No se pudo conectar con el panel.');});
+}
+function panelEmpDe(nit,gestion){
+  nit=String(nit||'').replace(/\D/g,'');if(!nit)return null;
+  var l=empDirList().filter(function(e){return String(e.nit||'').replace(/\D/g,'')===nit;});
+  return l.find(function(e){return String(e.gestion||'')===String(gestion||'');})||l[0]||null;
+}
+function panelCrearEmp(id){
+  var r=(S.pnData||[]).find(function(x){return x.id===id;});if(!r)return;
+  if(!confirm('¿Crear la empresa "'+r.cliente+'" (NIT '+r.nit+') para la gestión '+(r.gestion||'')+' en el Sistema Contable?'))return;
+  var eid='emp_'+Date.now(),e=newEmp(eid),g=String(r.gestion||new Date().getFullYear());
+  e.cfg.razonSocial=r.cliente;e.cfg.nit=r.nit;e.cfg.gestion=g;e.cfg.fechaInicio=g+'-01-01';e.cfg.fechaFin=g+'-12-31';
+  S.empresas.push(e);S.activeId=eid;saveLS();fbPushEmpMeta(e);S.tab='config';re();
+  if(typeof showNotif==='function')showNotif('Empresa creada con los datos del panel. Completa su configuración.');
+}
+function renderListaPanel(){
+  panelKeyLoad();
+  var isAdm=isCurrentAdmin(),key=panelKey(),canEd=canEdit('listaeeff');
+  var keyCard='<div class="card" style="margin-bottom:12px"><div class="h3" style="margin-top:0">Conexión con el panel NUMMEROS</div>'+
+    (isAdm?'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="pn-key" type="password" value="'+gsEsc(key)+'" placeholder="Pega la clave de conexión (empieza con sis_)" style="flex:1;min-width:220px"/><button class="btn" onclick="setPanelKey()">Guardar clave</button></div>'+
+      '<div class="nota" style="margin-top:4px">La clave se copia del panel: <strong>Configuración → Conexiones → Sistema Contable</strong>. Se guarda para todo el equipo.</div>'
+      :'<div class="nota">'+(key?'Conexión configurada por el administrador.':'El administrador aún no configuró la conexión con el panel.')+'</div>')+'</div>';
+  if(!key)return keyCard+'<div class="card"><div class="info iy">Falta la clave de conexión con el panel.</div></div>';
+  if(!S.pnLoaded&&S.pnStatus!=='cargando'&&S.pnStatus!=='error')setTimeout(function(){loadPanelEEFF(false);},0);
+  var data=S.pnData||[],ui=S.pnUI||(S.pnUI={q:'',est:'',g:''});
+  var gestiones=[];data.forEach(function(r){if(r.gestion&&gestiones.indexOf(r.gestion)<0)gestiones.push(r.gestion);});gestiones.sort().reverse();
+  var lista=data.filter(function(r){
+    if(ui.est&&r.estado!==ui.est)return false;if(ui.g&&r.gestion!==ui.g)return false;
+    if(ui.q){var q=ui.q.toLowerCase();if((r.cliente+' '+r.nit+' '+r.detalle+' '+r.nro+' '+r.balance).toLowerCase().indexOf(q)<0)return false;}
+    return true;});
+  var cnt=function(k){return data.filter(function(r){return r.estado===k;}).length;};
+  var estados=S.pnEstados&&S.pnEstados.length?S.pnEstados:[['pendiente','Pendiente'],['en_proceso','En proceso'],['entregado','Entregado']];
+  var col={pendiente:'#93370D',en_proceso:'#235347',entregado:'#2E7D5B'};
+  var filas=lista.map(function(r){
+    var em=panelEmpDe(r.nit,r.gestion);
+    var est=canEd?'<select onchange="panelCambiarEstado(\''+r.id+'\',this.value)" style="font-size:12px;padding:4px 6px;border-radius:6px;border:1px solid var(--nm-borde,#DAF1DE);color:'+(col[r.estado]||'inherit')+';font-weight:600">'+estados.map(function(e){return '<option value="'+e[0]+'"'+(e[0]===r.estado?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select>'
+      :'<b style="color:'+(col[r.estado]||'inherit')+'">'+((estados.find(function(e){return e[0]===r.estado;})||[0,r.estado])[1])+'</b>';
+    var sis=em?'<button class="btn-green" style="font-size:11px;padding:4px 10px" onclick="openEmpresa(\''+em.id+'\')">Abrir'+(em.terminado?' · Finalizado':'')+'</button>'
+      :(canEd?'<button style="font-size:11px;padding:4px 10px;background:none;border:1px solid var(--nm-borde,#DAF1DE);border-radius:6px;cursor:pointer" onclick="panelCrearEmp(\''+r.id+'\')">Crear empresa</button>':'<span style="font-size:11px;color:#557363">No creada</span>');
+    return '<tr><td style="white-space:nowrap">'+gsEsc(r.fecha)+'</td><td>'+gsEsc(String(r.nro||''))+'</td>'+
+      '<td><b>'+gsEsc(r.cliente)+'</b><div style="font-size:11px;color:#557363">NIT '+gsEsc(r.nit)+(r.rubro?' · '+gsEsc(r.rubro):'')+(r.celular?' · '+gsEsc(r.celular):'')+'</div></td>'+
+      '<td>'+gsEsc(r.balance||r.detalle)+(r.revision?'<div style="font-size:11px;color:#B42318">Pago en revisión</div>':'')+(r.deuda?'<div style="font-size:11px;color:#B42318">Con deuda</div>':'')+'</td>'+
+      '<td style="text-align:center">'+gsEsc(r.gestion)+'</td><td style="text-align:right;white-space:nowrap">Bs '+Number(r.importe||0).toLocaleString('es-BO',{minimumFractionDigits:2})+'</td><td>'+est+'</td><td>'+sis+'</td></tr>';
+  }).join('');
+  var kpi=function(n,l,c){return '<div style="flex:1;min-width:120px;background:var(--nm-campo,#EEF7F0);border:1px solid var(--nm-borde,#DAF1DE);border-radius:10px;padding:10px 12px"><div style="font-size:22px;font-weight:700;color:'+(c||'inherit')+'">'+n+'</div><div style="font-size:11px;color:#557363">'+l+'</div></div>';};
+  var body=S.pnStatus==='cargando'&&!data.length?'<div class="info ib">Cargando la lista del panel…</div>'
+    :S.pnStatus==='error'?'<div class="info" style="background:#FDECEA;border:1px solid #F4B8B2;color:#B42318;font-size:12px">'+gsEsc(S.pnErr)+'</div>'
+    :'<div class="tbl-wrap" style="max-height:62vh"><table><thead><tr><th>Fecha</th><th>N° Rec</th><th>Cliente</th><th>Balance</th><th>Gestión</th><th style="text-align:right">Importe</th><th>Estado</th><th>En el sistema</th></tr></thead><tbody>'+
+      (filas||'<tr><td colspan="8" style="text-align:center;color:#557363">Sin balances con estos filtros.</td></tr>')+'</tbody></table></div>';
+  return keyCard+'<div class="card">'+
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><div class="h2" style="flex:1;margin:0">Estados Financieros · Panel NUMMEROS</div>'+
+      '<span style="font-size:11px;color:#557363">'+(S.pnAt?'Actualizado '+new Date(S.pnAt).toLocaleTimeString('es-BO')+' · se actualiza solo cada minuto':'')+'</span>'+
+      '<button onclick="loadPanelEEFF(false)" style="background:none;border:1px solid var(--nm-borde,#DAF1DE);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer">Actualizar</button></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+kpi(data.length,'Total')+kpi(cnt('pendiente'),'Pendientes','#93370D')+kpi(cnt('en_proceso'),'En proceso','#235347')+kpi(cnt('entregado'),'Entregados','#2E7D5B')+'</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<select onchange="S.pnUI.g=this.value;re()" style="font-size:12px;width:auto"><option value="">Todas las gestiones</option>'+gestiones.map(function(g){return '<option'+(g===ui.g?' selected':'')+'>'+g+'</option>';}).join('')+'</select>'+
+      '<select onchange="S.pnUI.est=this.value;re()" style="font-size:12px;width:auto"><option value="">Todos los estados</option>'+estados.map(function(e){return '<option value="'+e[0]+'"'+(e[0]===ui.est?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select>'+
+      '<input id="pn-q" value="'+gsEsc(ui.q)+'" oninput="S.pnUI.q=this.value;clearTimeout(window._pnT);window._pnT=setTimeout(function(){re();var q=document.getElementById(\'pn-q\');if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length);}},300)" placeholder="Buscar cliente, NIT, N°…" style="flex:1;min-width:180px;font-size:12px;width:auto"/></div>'+
+    body+'<div class="nota" style="margin-top:8px">Esta lista viene directo del panel: lo que cambie allá aparece aquí en menos de un minuto, y el estado que cambies aquí se guarda en el panel.</div></div>';
+}
 function renderListaEEFF(){
+  var origen=eeffOrigen();
+  var sw='<div style="display:flex;gap:6px;margin-bottom:12px">'+
+    [['panel','Panel NUMMEROS (automático)'],['sheet','Google Sheets (Balance2025)']].map(function(o){return '<button onclick="setEeffOrigen(\''+o[0]+'\')" style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--nm-borde,#DAF1DE);'+(origen===o[0]?'background:#235347;color:#fff':'background:none;color:inherit')+'">'+o[1]+'</button>';}).join('')+'</div>';
+  if(origen==='panel')return sw+renderListaPanel();
+  return sw+renderListaEEFFSheet();
+}
+function renderListaEEFFSheet(){
   var isAdm=isCurrentAdmin();
   var url=gsheetUrl();
   var canEd=canEdit('listaeeff');
