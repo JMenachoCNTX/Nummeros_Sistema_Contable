@@ -353,7 +353,8 @@ const CHANGELOG=[
     'Lista EEFF: nueva vista "Panel NUMMEROS" que muestra automáticamente la lista de Estados Financieros del panel (nummerospanel.contaxbolivia.com) y se actualiza sola cada minuto.',
     'Desde esa lista se puede cambiar el estado (Pendiente / En proceso / Entregado) y el cambio aparece también en el panel.',
     'Cada balance muestra si la empresa ya existe en el sistema (por NIT y gestión) con botón para abrirla o crearla con los datos del cliente.',
-    'La vista anterior de Google Sheets (Balance2025) sigue disponible en la misma pestaña.'
+    'La vista anterior de Google Sheets (Balance2025) sigue disponible en la misma pestaña.',
+    'Se ven también el responsable, el avance (etapas completadas de 9) y el resultado (utilidad o pérdida) que se llenan en el panel.'
   ]},
   {v:'V3.38', fecha:'2026-10-21', cambios:[
     'Fotografías: se reemplazaron todas las fotos del sistema por las nuevas versiones oficiales del manual de marca NUMMEROS (13 fotos de Pitágoras, Euclides y Arquímedes, con mejor resolución e iluminación).',
@@ -4747,13 +4748,13 @@ function renderListaPanel(){
     return '<tr><td style="white-space:nowrap">'+gsEsc(r.fecha)+'</td><td>'+gsEsc(String(r.nro||''))+'</td>'+
       '<td><b>'+gsEsc(r.cliente)+'</b><div style="font-size:11px;color:#557363">NIT '+gsEsc(r.nit)+(r.rubro?' · '+gsEsc(r.rubro):'')+(r.celular?' · '+gsEsc(r.celular):'')+'</div></td>'+
       '<td>'+gsEsc(r.balance||r.detalle)+(r.revision?'<div style="font-size:11px;color:#B42318">Pago en revisión</div>':'')+(r.deuda?'<div style="font-size:11px;color:#B42318">Con deuda</div>':'')+'</td>'+
-      '<td style="text-align:center">'+gsEsc(r.gestion)+'</td><td style="text-align:right;white-space:nowrap">Bs '+Number(r.importe||0).toLocaleString('es-BO',{minimumFractionDigits:2})+'</td><td>'+est+'</td><td>'+sis+'</td></tr>';
+      '<td style="text-align:center">'+gsEsc(r.gestion)+'</td><td>'+gsEsc(r.resp||'—')+'</td><td style="text-align:center;white-space:nowrap">'+(r.etapas?(r.avance||0)+'/'+r.etapas:'')+'</td><td style="text-align:right;white-space:nowrap;'+(r.resultado==='UTILIDAD'?'color:#B4453C;font-weight:600':'')+'">'+(r.utilidad==null?'':(r.resultado||'')+' '+Number(r.utilidad).toLocaleString('es-BO',{minimumFractionDigits:2}))+'</td><td style="text-align:right;white-space:nowrap">Bs '+Number(r.importe||0).toLocaleString('es-BO',{minimumFractionDigits:2})+'</td><td>'+est+'</td><td>'+sis+'</td></tr>';
   }).join('');
   var kpi=function(n,l,c){return '<div style="flex:1;min-width:120px;background:var(--nm-campo,#EEF7F0);border:1px solid var(--nm-borde,#DAF1DE);border-radius:10px;padding:10px 12px"><div style="font-size:22px;font-weight:700;color:'+(c||'inherit')+'">'+n+'</div><div style="font-size:11px;color:#557363">'+l+'</div></div>';};
   var body=S.pnStatus==='cargando'&&!data.length?'<div class="info ib">Cargando la lista del panel…</div>'
     :S.pnStatus==='error'?'<div class="info" style="background:#FDECEA;border:1px solid #F4B8B2;color:#B42318;font-size:12px">'+gsEsc(S.pnErr)+'</div>'
-    :'<div class="tbl-wrap" style="max-height:62vh"><table><thead><tr><th>Fecha</th><th>N° Rec</th><th>Cliente</th><th>Balance</th><th>Gestión</th><th style="text-align:right">Importe</th><th>Estado</th><th>En el sistema</th></tr></thead><tbody>'+
-      (filas||'<tr><td colspan="8" style="text-align:center;color:#557363">Sin balances con estos filtros.</td></tr>')+'</tbody></table></div>';
+    :'<div class="tbl-wrap" style="max-height:62vh"><table><thead><tr><th>Fecha</th><th>N° Rec</th><th>Cliente</th><th>Balance</th><th>Gestión</th><th>Responsable</th><th>Avance</th><th style="text-align:right">Resultado</th><th style="text-align:right">Importe</th><th>Estado</th><th>En el sistema</th></tr></thead><tbody>'+
+      (filas||'<tr><td colspan="11" style="text-align:center;color:#557363">Sin balances con estos filtros.</td></tr>')+'</tbody></table></div>';
   return keyCard+'<div class="card">'+
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><div class="h2" style="flex:1;margin:0">Estados Financieros · Panel NUMMEROS</div>'+
       '<span style="font-size:11px;color:#557363">'+(S.pnAt?'Actualizado '+new Date(S.pnAt).toLocaleTimeString('es-BO')+' · se actualiza solo cada minuto':'')+'</span>'+
