@@ -14,8 +14,6 @@ Tributario, Compensaciones, Verificaciones, NITs, Historial, Usuarios, Configura
 ## Cómo está armado (archivos principales)
 - `index.html` — el sistema VIGENTE, un solo archivo grande (~800 KB). Versión en la constante `VERSION`
   (ej. `'V3.39'`), cerca de la línea 350.
-- `CONTAX_v2_V31.html` — **copia antigua** (título "CONTAX Sistema Contable v2", subida el 07/07/2026, sin
-  Firebase, solo guardaba en el navegador, logos en base64). No se publica como página principal; no editarla.
 - `marca/` — logos, íconos, fuentes, colores (`nummeros-tokens.css`) y fotos "clásicos".
 - `CNAME` — dominio propio. `README.md` casi vacío.
 
@@ -39,4 +37,4 @@ Tributario, Compensaciones, Verificaciones, NITs, Historial, Usuarios, Configura
 - Hay mejoras de seguridad pendientes en el ingreso y en las reglas de Firestore (Jhonny tiene el detalle
   aparte). Revisar las reglas en la consola antes de agregar datos sensibles.
 - La configuración web de Firebase (apiKey) es pública por diseño.
-- Al cambiar `index.html`, subir `VERSION`. No confundir con `CONTAX_v2_V31.html`.
+- Al cambiar `index.html`, subir `VERSION`.
