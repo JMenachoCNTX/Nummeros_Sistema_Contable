@@ -347,8 +347,13 @@ body.dark-mode svg rect[fill="#163832"],body.dark-mode svg rect[fill="#235347"]{
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.40';
+const VERSION='V3.41';
 const CHANGELOG=[
+  {v:'V3.41', fecha:'2026-11-16', cambios:[
+    'FINALIZAR ahora congela el balance: guarda dentro de la empresa la cuenta de cada NIT de sus compras y las UFVs que usa. Cambios posteriores en la lista general de NITs o UFVs ya no lo modifican.',
+    'Los balances que ya estaban finalizados se congelan automáticamente la primera vez que se abren.',
+    'Al reabrir un balance (volver a En Curso) vuelve a usar la lista general.'
+  ]},
   {v:'V3.40', fecha:'2026-11-16', cambios:[
     'Protección: un equipo con UFVs, NITs o Plan de cuentas vacíos ya no puede borrar esas listas de la nube por accidente.',
     'El sistema espera a recibir los datos de la nube antes de guardar en ella.',
@@ -1089,12 +1094,59 @@ function empDirList(){
   return Object.keys(m).map(function(k){return m[k];});
 }
 // Marca/desmarca una empresa como terminada (se refleja en el directorio compartido)
+// ═══ V3.41: CONGELAR BALANCES FINALIZADOS ═══
+// Al finalizar, se guardan dentro de la empresa las cuentas de cada NIT de su RCV y las UFVs que usa.
+// Así, aunque cambie o se pierda la lista global de NITs o de UFVs, el balance finalizado no se mueve.
+function cxIsoFecha(f){
+  var iso=String(f||'').trim();
+  if(/^\d{1,2}\/\d{1,2}\/\d{4}/.test(iso)){var p=iso.split('/');iso=p[2].slice(0,4)+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');}
+  if(/^\d+$/.test(iso))return null;
+  return iso.slice(0,10);
+}
+function cxCongelado(){
+  try{var e=emp();return (e&&e.cfg&&e.cfg.terminado&&e.congelado)?e.congelado:null;}catch(x){return null;}
+}
+function cxPuedeCongelar(){
+  // Solo con las listas de la nube ya cargadas y con datos (para no congelar listas vacías)
+  return (typeof fbGlobalLoaded==='undefined'||fbGlobalLoaded||!fbDb)&&(S.nits||[]).length>0&&(S.ufvData||[]).length>0;
+}
+function congelarBalance(e){
+  if(!e||!cxPuedeCongelar())return false;
+  var rcv=(e.rcvData&&e.rcvData.length)?e.rcvData:parseRCV(e.rcvTxt||'').filter(function(r){return r.estado==='CONSOLIDADO';});
+  var nits={},ufv={},fechas={};
+  rcv.forEach(function(r){
+    var k=String(r.nit==null?'':r.nit);
+    if(!(k in nits)){var lk=nitLookupGlobal(k);nits[k]=lk?{nit:lk.nit,razon:lk.razon,cat:lk.cat,cuenta:lk.cuenta}:null;}
+    var f=cxIsoFecha(r.fecha);if(f)fechas[f]=1;
+  });
+  (e.otrosAsientos||[]).forEach(function(oa){var f=cxIsoFecha(oa.fecha);if(f)fechas[f]=1;});
+  var cfg=e.cfg||{},fi=cxIsoFecha(cfg.fechaInicio),ff=cxIsoFecha(cfg.fechaFin);
+  (S.ufvData||[]).forEach(function(u){
+    var f=cxIsoFecha(u.fecha);if(!f)return;
+    if(fechas[f]||(fi&&ff&&f>=fi&&f<=ff))ufv[f]=u.ufv;
+  });
+  e.congelado={nits:nits,ufv:ufv,fecha:new Date().toISOString(),facturas:rcv.length};
+  return true;
+}
+// Balances que ya estaban finalizados antes de V3.41: se congelan la primera vez que se abren.
+function cxAutoCongelar(){
+  try{
+    var e=emp();if(!e||!e.cfg||!e.cfg.terminado||e.congelado)return;
+    if(fbDb&&window._cxEmpNube!==e.id)return; // esperar a que la empresa llegue de la nube
+    if(congelarBalance(e))saveLS();
+  }catch(x){}
+}
 function toggleEmpDone(id){
   var le=(S.empresas||[]).find(function(x){return x.id===id;});
   var de=(S.empDir||[]).find(function(x){return x.id===id;});
   var cur=le&&le.cfg?!!le.cfg.terminado:(de?!!de.terminado:false);
   var nv=!cur;
-  if(le&&le.cfg){le.cfg.terminado=nv;saveLS();fbPushEmpMeta(le);}
+  if(le&&le.cfg){
+    le.cfg.terminado=nv;
+    if(nv){if(!congelarBalance(le))showNotif('⚠️ Finalizado, pero no se pudieron congelar las cuentas: faltan los NITs o UFVs. Se congelará al abrirlo.');}
+    else delete le.congelado;
+    saveLS();fbPushEmpMeta(le);
+  }
   if(de)de.terminado=nv;
   if(fbDb){var p={emps:{}};p.emps[id]={terminado:nv};fbDb.collection('contax_config').doc('empresas').set(p,{merge:true}).catch(function(){});}
   re();
@@ -1146,6 +1198,7 @@ function fbListenEmp(id){
     if(snap.metadata.hasPendingWrites)return;        // es un cambio propio en camino
     if(!snap.exists){fbPushEmp(id);return;}          // nube vacía → subir lo local
     if(snap.metadata.fromCache)return;
+    window._cxEmpNube=id;                           // V3.41: esta empresa ya se recibió de la nube
     try{
       var incoming=JSON.parse(snap.data().data||'{}');
       if(!incoming||!incoming.emp)return;
@@ -1689,6 +1742,12 @@ function numeroALiteral(num){
 }
 
 function nitLookup(nit){
+  // V3.41: si el balance está FINALIZADO, usa las cuentas guardadas al finalizar
+  var c=cxCongelado();
+  if(c&&c.nits&&Object.prototype.hasOwnProperty.call(c.nits,String(nit)))return c.nits[String(nit)]||undefined;
+  return nitLookupGlobal(nit);
+}
+function nitLookupGlobal(nit){
   return (S.nits||[]).find(n=>String(n.nit)===String(nit));
 }
 
@@ -2325,6 +2384,11 @@ function setRcvAcctFilter(v){_rcvAcct=v;applyRcvFilters();}
 function filterVenInPlace(v){_venFilter=v;var q=v.toLowerCase();Array.from(document.querySelectorAll('#ven-tbody tr, #ing-tbody tr')).forEach(function(tr){tr.style.display=q&&!tr.textContent.toLowerCase().includes(q)?'none':'';});}
 function filterVentasInPlace(v){_venFilter=v;var q=v.toLowerCase();Array.from(document.querySelectorAll('#ven-tbody tr')).forEach(function(tr){tr.style.display=q&&!tr.textContent.toLowerCase().includes(q)?'none':'';});}
 function renderRCV(){
+  var _cg=cxCongelado();
+  var _avisoCg=_cg?'<div class="info ig" style="margin-bottom:10px">🔒 <strong>Balance finalizado:</strong> las cuentas de los NITs y las UFVs quedaron guardadas el '+new Date(_cg.fecha).toLocaleDateString('es-BO')+'. Los cambios en la lista general de NITs o UFVs ya no lo modifican. Para cambiarlo, reábrelo con el botón FINALIZAR.</div>':'';
+  return _avisoCg+renderRCVBody();
+}
+function renderRCVBody(){
   const rcvFromFile=emp().rcvData||[];
   const rcvFromPaste=parseRCV(emp().rcvTxt||'').filter(r=>r.estado==='CONSOLIDADO');
   const usingFile=rcvFromFile.length>0;
@@ -6050,14 +6114,13 @@ function oaLineSet(code,sdId){
 
 // ─── Helpers para AFV con fecha ──────────────────────────────
 function getUFVForDate(fecha){
-  if(!fecha||!S.ufvData||S.ufvData.length===0)return null;
-  let iso=String(fecha).trim();
-  // DD/MM/YYYY → YYYY-MM-DD
-  if(/^\d{1,2}\/\d{1,2}\/\d{4}/.test(iso)){
-    const p=iso.split('/');iso=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
-  }
-  // Serial date (Excel) → skip
-  if(/^\d+$/.test(iso))return null;
+  if(!fecha)return null;
+  let iso=cxIsoFecha(fecha);
+  if(!iso)return null;
+  // V3.41: balance FINALIZADO → UFV guardada al finalizar
+  var c=cxCongelado();
+  if(c&&c.ufv&&c.ufv[iso])return pn(c.ufv[iso]);
+  if(!S.ufvData||S.ufvData.length===0)return null;
   const found=S.ufvData.find(u=>u.fecha===iso);
   return found?pn(found.ufv):null; // pn entiende coma decimal ("2,81402" → 2.81402)
 }
@@ -7528,6 +7591,7 @@ function navIcon(id){
 
 // ═══ MAIN RENDER FUNCTION ══════════════════════════════
 function re(){
+  cxAutoCongelar();
   // V57: Inicio de sesión único con Firebase Auth
   // V84 — acceso por correo + PIN (la sesión es local; la nube sincroniza aparte)
   var _sess=(typeof getCurrentUser==='function')?getCurrentUser():null;
