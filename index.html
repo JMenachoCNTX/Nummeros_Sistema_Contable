@@ -347,8 +347,12 @@ body.dark-mode svg rect[fill="#163832"],body.dark-mode svg rect[fill="#235347"]{
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.44';
+const VERSION='V3.45';
 const CHANGELOG=[
+  {v:'V3.45', fecha:'2026-11-16', cambios:[
+    'Las UFVs y los NITs se guardan ahora en su propio espacio de la nube. Una versión vieja del sistema que siga abierta en otra computadora ya no puede borrarlos.',
+    'Si la nube llegara vacía y este equipo tiene las listas, las vuelve a subir solo.'
+  ]},
   {v:'V3.44', fecha:'2026-11-16', cambios:[
     'Aviso de versión nueva: si se publica una actualización mientras tienes el sistema abierto, aparece un aviso con el botón "Recargar ahora".',
     'El sistema revisa cada pocos minutos y cada vez que vuelves a la pestaña.'
@@ -835,7 +839,11 @@ var fbDb=null,fbAuth=null,fbUser=null,fbListener=null,fbGlobalListener=null,fbAc
 var syncApplying=false,syncTimer=null,syncGlobalTimer=null,syncReady=false,_lastListenId=null;
 // V3.40: protección de listas compartidas (UFV, NITs, Plan) contra borrado accidental
 var fbGlobalLoaded=false,fbGlobalCloud=null,_cxAllowEmpty={};
-var CX_LISTAS=['ufvData','nits','planCuentas'];
+var CX_LISTAS=['planCuentas'];          // listas protegidas dentro de contax_config/global
+// V3.45: UFVs y NITs viven en su propio documento (contax_config/listas). Las versiones viejas del sistema
+// que sigan abiertas solo escriben en "global", así que ya no pueden borrarlas.
+var CX_LISTAS2=['ufvData','nits'];
+var fbListasLoaded=false,fbListasCloud=null,fbListasListener=null,_fbGlobalRawListas=null,_listasTimer=null;
 function cxPermitirVacio(k){_cxAllowEmpty[k]=true;}
 var fbAuthResolved=false,fbUnavailable=false;
 var authDenied=false,authDeniedEmail='',presenceTimer=null;
@@ -1004,6 +1012,7 @@ function initFirebase(){
 function startSync(){
   syncReady=true;
   fbListenGlobal();
+  fbListenListas();
   fbListenAcceso();
   fbListenEmpDir();
   fbListenEmp(S.activeId);
@@ -1121,7 +1130,7 @@ function cxCongelado(){
 }
 function cxPuedeCongelar(){
   // Solo con las listas de la nube ya cargadas y con datos (para no congelar listas vacías)
-  return (typeof fbGlobalLoaded==='undefined'||fbGlobalLoaded||!fbDb)&&(S.nits||[]).length>0&&(S.ufvData||[]).length>0;
+  return (!fbDb||(fbGlobalLoaded&&fbListasLoaded))&&(S.nits||[]).length>0&&(S.ufvData||[]).length>0;
 }
 function congelarBalance(e){
   if(!e||!cxPuedeCongelar())return false;
@@ -1363,7 +1372,8 @@ function applyGlobal(g){
 function fbPushGlobal(){
   if(!fbDb||syncApplying)return;
   // No subir nada hasta haber recibido los datos reales de la nube (evita subir listas vacías de un navegador nuevo)
-  if(!fbGlobalLoaded){scheduleSyncGlobal();return;}
+  if(!fbGlobalLoaded||!fbListasLoaded){scheduleSyncGlobal();return;}
+  fbPushListas();
   var snap=globalSnapshot();
   CX_LISTAS.forEach(function(k){
     var nube=fbGlobalCloud&&fbGlobalCloud[k];
@@ -1389,24 +1399,82 @@ function fbListenGlobal(){
     if(!snap.exists){fbGlobalLoaded=true;fbGlobalCloud={};fbPushGlobal();return;}
     try{
       var g=JSON.parse(snap.data().data||'{}');
+      // V3.45: UFVs y NITs se leen SOLO del documento "listas" (las de "global" pueden venir vacías de versiones viejas)
+      if(!_fbGlobalRawListas)_fbGlobalRawListas={ufvData:g.ufvData||[],nits:g.nits||[]};
+      CX_LISTAS2.forEach(function(k){delete g[k];});
       fbGlobalLoaded=true;fbGlobalCloud=g;
+      if(fbListasLoaded===false&&fbListasCloud==='falta')fbMigrarListas();
       // Si la nube trae una lista vacía pero este navegador la tiene llena, se conserva la local y se vuelve a subir
       var reparar=false;
       CX_LISTAS.forEach(function(k){
         var loc=S[k];
         if(Array.isArray(g[k])&&!g[k].length&&loc&&loc.length){delete g[k];reparar=true;}
       });
-      if(JSON.stringify(g)!==JSON.stringify(globalSnapshot())){
+      var _gs=globalSnapshot();CX_LISTAS2.forEach(function(k){delete _gs[k];});
+      if(JSON.stringify(g)!==JSON.stringify(_gs)){
         syncApplying=true;applyGlobal(g);syncApplying=false;
         re();
       }
       if(reparar){
         CX_LISTAS.forEach(function(k){if(!fbGlobalCloud[k]||!fbGlobalCloud[k].length)fbGlobalCloud[k]=S[k]||[];});
         fbPushGlobal();
-        if(typeof showNotif==='function')showNotif('Se restauraron en la nube las UFVs/NITs guardadas en este equipo');
+        if(typeof showNotif==='function')showNotif('Se restauró en la nube el Plan de cuentas guardado en este equipo');
       }
     }catch(e){syncApplying=false;}
   },function(e){console.warn('listen global:',e.message);});
+}
+// ── V3.45: documento propio para UFVs y NITs ──
+function listasSnapshot(){return {ufvData:S.ufvData||[],nits:S.nits||[]};}
+function fbPushListas(forzar){
+  if(!fbDb||syncApplying||!fbListasLoaded)return;
+  var snap=listasSnapshot();
+  CX_LISTAS2.forEach(function(k){
+    var nube=fbListasCloud&&fbListasCloud[k];
+    if((!snap[k]||!snap[k].length)&&nube&&nube.length&&!_cxAllowEmpty[k]){snap[k]=nube;S[k]=nube;}
+    delete _cxAllowEmpty[k];
+  });
+  if(!forzar&&fbListasCloud&&JSON.stringify(snap)===JSON.stringify({ufvData:fbListasCloud.ufvData||[],nits:fbListasCloud.nits||[]}))return;
+  fbListasCloud=snap;
+  fbDb.collection('contax_config').doc('listas').set({
+    data:JSON.stringify(snap),by:fbUserName(),at:firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(function(e){console.warn('push listas:',e.message);});
+}
+// Primera vez: crea "listas" con lo que haya (este equipo o la copia de "global")
+function fbMigrarListas(){
+  if(!fbGlobalLoaded)return;
+  var g=_fbGlobalRawListas||{};
+  CX_LISTAS2.forEach(function(k){if((!S[k]||!S[k].length)&&g[k]&&g[k].length)S[k]=g[k];});
+  fbListasLoaded=true;fbListasCloud={};
+  if(!(S.ufvData||[]).length&&!(S.nits||[]).length)return; // nada que migrar: no se crea vacío
+  fbPushListas(true);saveLS();re();
+}
+function fbListenListas(){
+  if(fbListasListener){fbListasListener();fbListasListener=null;}
+  if(!fbDb)return;
+  fbListasListener=fbDb.collection('contax_config').doc('listas').onSnapshot(function(snap){
+    if(snap.metadata.hasPendingWrites)return;
+    if(snap.metadata.fromCache)return;
+    if(!snap.exists){fbListasCloud='falta';fbMigrarListas();return;}
+    try{
+      var l=JSON.parse(snap.data().data||'{}');
+      fbListasLoaded=true;fbListasCloud={ufvData:l.ufvData||[],nits:l.nits||[]};
+      var reparar=false,cambio=false;
+      CX_LISTAS2.forEach(function(k){
+        var inc=l[k]||[],loc=S[k]||[];
+        if(!inc.length&&loc.length){reparar=true;return;}          // nube vacía, local lleno → se conserva y se repara
+        if(JSON.stringify(inc)!==JSON.stringify(loc)){S[k]=inc;cambio=true;}
+      });
+      if(cambio){
+        syncApplying=true;
+        try{localStorage.setItem('contax_v2',JSON.stringify({empresas:S.empresas,activeId:S.activeId,planCuentas:S.planCuentas,ufvData:S.ufvData,nits:S.nits}));}catch(e){}
+        syncApplying=false;re();
+      }
+      if(reparar){
+        fbPushListas(true);
+        if(typeof showNotif==='function')showNotif('Se restauraron en la nube las UFVs/NITs guardadas en este equipo');
+      }
+    }catch(e){syncApplying=false;}
+  },function(e){console.warn('listen listas:',e.message);});
 }
 function scheduleSyncGlobal(){
   if(!fbDb||syncApplying||!syncReady)return;

@@ -20,7 +20,7 @@ import urllib.request
 API_KEY = "AIzaSyC20z4ToZtFSAlfOiUOJeC4BAUSEpYyk4Q"  # configuración web pública de Firebase
 PROYECTO = "sistema-contable-contax"
 DOC = ("https://firestore.googleapis.com/v1/projects/%s/databases/(default)"
-       "/documents/contax_config/global" % PROYECTO)
+       "/documents/contax_config/listas" % PROYECTO)  # V3.45: UFVs y NITs viven aquí
 BCB = ("https://www.bcb.gob.bo/librerias/indicadores/ufv/gestion.php"
        "?sdd={d1:02d}&smm={m1:02d}&saa={a1}&edd={d2:02d}&emm={m2:02d}&eaa={a2}&qlist=1")
 MESES = {m: i + 1 for i, m in enumerate(
