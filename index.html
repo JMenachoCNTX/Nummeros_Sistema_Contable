@@ -347,8 +347,12 @@ body.dark-mode svg rect[fill="#163832"],body.dark-mode svg rect[fill="#235347"]{
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.43';
+const VERSION='V3.44';
 const CHANGELOG=[
+  {v:'V3.44', fecha:'2026-11-16', cambios:[
+    'Aviso de versión nueva: si se publica una actualización mientras tienes el sistema abierto, aparece un aviso con el botón "Recargar ahora".',
+    'El sistema revisa cada pocos minutos y cada vez que vuelves a la pestaña.'
+  ]},
   {v:'V3.43', fecha:'2026-11-16', cambios:[
     'Cuando un balance cuadra (Balance General, Sumas y Saldos y Flujo) y no tiene facturas por verificar, aparece el aviso "Este balance cuadra y no tiene pendientes" con botón FINALIZAR. No se finaliza solo.',
     'El botón "Todavía no" oculta el aviso de esa empresa en este equipo.'
@@ -1192,6 +1196,42 @@ function cxAvisoFinalizar(c){
       '<button style="font-size:11px;padding:5px 10px;background:none;border:1px solid var(--nm-borde,#DAF1DE);border-radius:6px;cursor:pointer" onclick="try{localStorage.setItem(\'nosug_'+e.id+'\',\'1\')}catch(x){};re()">Todavía no</button></div>';
   }catch(x){return '';}
 }
+// ═══ V3.44: AVISO DE VERSIÓN NUEVA ═══
+// Cada 5 minutos (y al volver a la pestaña) revisa si se publicó una versión nueva del sistema.
+// Si la hay, muestra un aviso fijo con botón para recargar la página.
+var _cxUltRev=0,_cxVerNueva='';
+function cxRevisarVersion(forzar){
+  if(_cxVerNueva)return;                              // ya se avisó
+  var ahora=Date.now();if(!forzar&&ahora-_cxUltRev<4*60*1000)return;
+  _cxUltRev=ahora;
+  if(location.protocol.indexOf('http')!==0)return;   // archivo local: no revisar
+  fetch(location.pathname+'?v='+ahora,{cache:'no-store',headers:{Range:'bytes=0-99999'}})
+    .then(function(r){return r.ok?r.text():'';})
+    .then(function(t){
+      var m=/const VERSION='([^']+)'/.exec(t||'');
+      if(!m||m[1]===VERSION)return;
+      var nov='';var m2=/\{v:'[^']+',\s*fecha:'[^']*',\s*cambios:\[\s*'((?:[^'\\]|\\.)*)'/.exec(t);
+      if(m2)nov=m2[1].replace(/\\'/g,"'");
+      _cxVerNueva=m[1];cxMostrarAvisoVersion(m[1],nov);
+    }).catch(function(){});
+}
+function cxMostrarAvisoVersion(v,nov){
+  if(document.getElementById('cx-aviso-version'))return;
+  var d=document.createElement('div');d.id='cx-aviso-version';
+  d.setAttribute('role','alert');
+  d.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:99999;max-width:min(560px,calc(100vw - 32px));background:#163832;color:#DAF1DE;border:2px solid #8EB69B;border-radius:12px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.35);font-size:13px;display:flex;gap:12px;align-items:center;flex-wrap:wrap';
+  var esc=function(x){return String(x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});};
+  d.innerHTML='<div style="flex:1;min-width:200px"><strong style="color:#fff">🔄 Hay una nueva versión del sistema ('+esc(v)+')</strong><br>'+
+    '<span style="font-size:12px">Recarga la página para recibir las mejoras. Tus cambios se guardan solos en la nube: espera unos segundos después de tu último cambio.</span>'+
+    (nov?'<div style="font-size:11px;opacity:.85;margin-top:4px">Novedad: '+esc(nov.length>160?nov.slice(0,157)+'…':nov)+'</div>':'')+'</div>'+
+    '<button onclick="location.reload()" style="background:#8EB69B;color:#051F20;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;font-size:13px">Recargar ahora</button>'+
+    '<button onclick="document.getElementById(\'cx-aviso-version\').remove()" title="Más tarde" style="background:none;border:none;color:#DAF1DE;cursor:pointer;font-size:16px;padding:4px">✕</button>';
+  document.body.appendChild(d);
+  try{if(typeof showNotif==='function')showNotif('🔄 Nueva versión '+v+' disponible: recarga la página');}catch(x){}
+}
+setInterval(function(){if(!document.hidden)cxRevisarVersion(false);},60*1000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)cxRevisarVersion(false);});
+setTimeout(function(){cxRevisarVersion(true);},30*1000);
 // Balances que ya estaban finalizados antes de V3.41: se congelan la primera vez que se abren.
 function cxAutoCongelar(){
   try{
