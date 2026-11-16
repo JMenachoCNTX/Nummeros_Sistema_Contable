@@ -347,8 +347,13 @@ body.dark-mode svg rect[fill="#163832"],body.dark-mode svg rect[fill="#235347"]{
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.39';
+const VERSION='V3.40';
 const CHANGELOG=[
+  {v:'V3.40', fecha:'2026-11-16', cambios:[
+    'Protección: un equipo con UFVs, NITs o Plan de cuentas vacíos ya no puede borrar esas listas de la nube por accidente.',
+    'El sistema espera a recibir los datos de la nube antes de guardar en ella.',
+    'Si la nube tiene una lista vacía y este equipo la tiene guardada, la vuelve a subir sola.'
+  ]},
   {v:'V3.39', fecha:'2026-10-27', cambios:[
     'Lista EEFF: nueva vista "Panel NUMMEROS" que muestra automáticamente la lista de Estados Financieros del panel (nummerospanel.contaxbolivia.com) y se actualiza sola cada minuto.',
     'Desde esa lista se puede cambiar el estado (Pendiente / En proceso / Entregado) y el cambio aparece también en el panel.',
@@ -810,6 +815,10 @@ function afTipoFor(tipo){var a=getAFTipos();return a.find(function(x){return x.t
 // ══════════════════════════════════════════════════════════
 var fbDb=null,fbAuth=null,fbUser=null,fbListener=null,fbGlobalListener=null,fbAccesoListener=null,_accesoTimer=null,fbDirListener=null;
 var syncApplying=false,syncTimer=null,syncGlobalTimer=null,syncReady=false,_lastListenId=null;
+// V3.40: protección de listas compartidas (UFV, NITs, Plan) contra borrado accidental
+var fbGlobalLoaded=false,fbGlobalCloud=null,_cxAllowEmpty={};
+var CX_LISTAS=['ufvData','nits','planCuentas'];
+function cxPermitirVacio(k){_cxAllowEmpty[k]=true;}
 var fbAuthResolved=false,fbUnavailable=false;
 var authDenied=false,authDeniedEmail='',presenceTimer=null;
 
@@ -1193,8 +1202,20 @@ function applyGlobal(g){
 }
 function fbPushGlobal(){
   if(!fbDb||syncApplying)return;
+  // No subir nada hasta haber recibido los datos reales de la nube (evita subir listas vacías de un navegador nuevo)
+  if(!fbGlobalLoaded){scheduleSyncGlobal();return;}
+  var snap=globalSnapshot();
+  CX_LISTAS.forEach(function(k){
+    var nube=fbGlobalCloud&&fbGlobalCloud[k];
+    if((!snap[k]||!snap[k].length)&&nube&&nube.length&&!_cxAllowEmpty[k]){
+      snap[k]=nube; // conserva lo que hay en la nube
+      S[k]=nube;
+    }
+    delete _cxAllowEmpty[k];
+  });
+  fbGlobalCloud=snap;
   fbDb.collection('contax_config').doc('global').set({
-    data:JSON.stringify(globalSnapshot()),
+    data:JSON.stringify(snap),
     by:fbUserName(),
     at:firebase.firestore.FieldValue.serverTimestamp()
   },{merge:true}).catch(function(e){console.warn('push global:',e.message);});
@@ -1204,13 +1225,26 @@ function fbListenGlobal(){
   if(!fbDb)return;
   fbGlobalListener=fbDb.collection('contax_config').doc('global').onSnapshot(function(snap){
     if(snap.metadata.hasPendingWrites)return;
-    if(!snap.exists){fbPushGlobal();return;}
     if(snap.metadata.fromCache)return;
+    if(!snap.exists){fbGlobalLoaded=true;fbGlobalCloud={};fbPushGlobal();return;}
     try{
       var g=JSON.parse(snap.data().data||'{}');
-      if(JSON.stringify(g)===JSON.stringify(globalSnapshot()))return;
-      syncApplying=true;applyGlobal(g);syncApplying=false;
-      re();
+      fbGlobalLoaded=true;fbGlobalCloud=g;
+      // Si la nube trae una lista vacía pero este navegador la tiene llena, se conserva la local y se vuelve a subir
+      var reparar=false;
+      CX_LISTAS.forEach(function(k){
+        var loc=S[k];
+        if(Array.isArray(g[k])&&!g[k].length&&loc&&loc.length){delete g[k];reparar=true;}
+      });
+      if(JSON.stringify(g)!==JSON.stringify(globalSnapshot())){
+        syncApplying=true;applyGlobal(g);syncApplying=false;
+        re();
+      }
+      if(reparar){
+        CX_LISTAS.forEach(function(k){if(!fbGlobalCloud[k]||!fbGlobalCloud[k].length)fbGlobalCloud[k]=S[k]||[];});
+        fbPushGlobal();
+        if(typeof showNotif==='function')showNotif('Se restauraron en la nube las UFVs/NITs guardadas en este equipo');
+      }
     }catch(e){syncApplying=false;}
   },function(e){console.warn('listen global:',e.message);});
 }
@@ -2611,7 +2645,7 @@ function renderUFVs(){
     '<div><label>Pegar datos UFV</label><textarea id="ufv-area" placeholder="01/01/2025&#9;2.47388&#10;02/01/2025&#9;2.47394&#10;..."></textarea>'+
     '<div style="display:flex;gap:8px;margin-top:8px">'+
     '<button class="btn-green" onclick="pasteUFV(document.getElementById(\'ufv-area\').value)"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.12em"><path d="M20 6L9 17l-5-5"/></svg> Cargar</button>'+
-    '<button class="btn-del" onclick="S.ufvData=[];saveLS();re()">Limpiar</button>'+
+    '<button class="btn-del" onclick="if(!confirm(\'¿Borrar todas las UFVs para todo el equipo?\'))return;cxPermitirVacio(\'ufvData\');S.ufvData=[];saveLS();re()">Limpiar</button>'+
     '</div></div>'+
     '<div>'+
     '<div class="info '+(data.length>0?'ig':'iy')+'">'+(data.length>0?'<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.12em"><path d="M20 6L9 17l-5-5"/></svg> <strong>'+data.length+'</strong> UFVs cargadas ('+data[0]?.fecha+' → '+data[data.length-1]?.fecha+')':"No hay UFVs cargadas")+'</div>'+
@@ -2649,7 +2683,7 @@ function renderNITs(){
     '<input type="text" value="'+(n.razon||'')+'" placeholder="Razón Social" onblur="S.nits['+i+'].razon=this.value;saveLS()"/>'+
     '<input type="text" value="'+(n.cat||'')+'" placeholder="Categoría" onblur="S.nits['+i+'].cat=this.value;saveLS()"/>'+
     sdMake('nitc'+i,n.cuenta||'','nitCuentaSet',false,'')+
-    '<button class="btn-del" onclick="S.nits.splice('+i+',1);saveLS();re()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.14em;margin-right:4px"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>'
+    '<button class="btn-del" onclick="S.nits.splice('+i+',1);if(!S.nits.length)cxPermitirVacio(\'nits\');saveLS();re()"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.14em;margin-right:4px"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>'
   ).join('');
   return '<div class="card"><div class="h2"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.14em;margin-right:5px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>NIT\'s — Base de Datos de Proveedores</div>'+
     '<p class="nota">Pega los datos directamente desde Google Sheets o Excel (NIT[Tab]Razón Social[Tab]Categoría[Tab]Cuenta). También puedes agregar de a uno.</p>'+
