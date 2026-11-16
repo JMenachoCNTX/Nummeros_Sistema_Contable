@@ -1,0 +1,21 @@
+name: Actualizar UFVs (Banco Central)
+
+on:
+  schedule:
+    - cron: "0 12 * * *"   # todos los días a las 08:00 de Bolivia
+  workflow_dispatch:         # botón para ejecutarlo a mano desde GitHub
+
+permissions:
+  contents: read
+
+jobs:
+  ufv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Agregar las UFVs nuevas del BCB al Sistema Contable
+        run: python3 scripts/actualizar_ufv.py
