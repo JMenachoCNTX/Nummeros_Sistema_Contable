@@ -22,6 +22,9 @@ Tributario, Compensaciones, Verificaciones, NITs, Historial, Usuarios, Configura
   - `contax/{id}` — datos de cada empresa.
   - `contax_config/acceso` y `global` — usuarios autorizados (correo + PIN + rol), permisos, plan de cuentas,
     UFV, NITs, Lista EEFF, URL de Google Sheet y llaves de IA.
+  - `contax_config/listas` (desde V3.45) — UFVs y NITs. Se leen SOLO de aquí (lo que traiga `global` en esas
+    claves se ignora, porque versiones viejas abiertas lo vaciaban). Las UFVs las agrega cada día
+    `scripts/actualizar_ufv.py` (GitHub Actions, `.github/workflows/actualizar-ufv.yml`).
   - `contax_config/empresas`, `contax_config/panel` (llave del puente del panel), `contax_presence`.
 - **localStorage** del navegador (claves `cx_*`, `contax_v2`) como copia local.
 - **Apps Script del panel NUMMEROS** (`PANEL_PUENTE`) para la Lista EEFF; ese código no está aquí.
