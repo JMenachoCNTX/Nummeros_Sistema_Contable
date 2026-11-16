@@ -347,8 +347,13 @@ body.dark-mode svg rect[fill="#163832"],body.dark-mode svg rect[fill="#235347"]{
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.41';
+const VERSION='V3.42';
 const CHANGELOG=[
+  {v:'V3.42', fecha:'2026-11-16', cambios:[
+    'Aviso "VERIFICAR DE NUEVO POR LA PÉRDIDA DE DATOS EN LA ASIGNACIÓN DE CUENTA CONTABLE" en las empresas con facturas de compras cuyo NIT no tiene cuenta asignada (quedaron en la cuenta general).',
+    'En RCV Compras esas facturas se marcan en rojo, con botón Confirmar por factura o para todas.',
+    'Un balance finalizado con facturas por verificar no se congela solo; al finalizar se pide confirmación.'
+  ]},
   {v:'V3.41', fecha:'2026-11-16', cambios:[
     'FINALIZAR ahora congela el balance: guarda dentro de la empresa la cuenta de cada NIT de sus compras y las UFVs que usa. Cambios posteriores en la lista general de NITs o UFVs ya no lo modifican.',
     'Los balances que ya estaban finalizados se congelan automáticamente la primera vez que se abren.',
@@ -1128,11 +1133,47 @@ function congelarBalance(e){
   e.congelado={nits:nits,ufv:ufv,fecha:new Date().toISOString(),facturas:rcv.length};
   return true;
 }
+// ═══ V3.42: FACTURAS POR VERIFICAR (pérdida de asignaciones de NITs, nov-2026) ═══
+// Una factura está "por verificar" si su NIT no tiene cuenta en la lista y nadie le fijó una cuenta a mano:
+// su cuenta salió de la categoría general (normalmente "Otros gastos").
+var CX_MSG_VERIFICAR='VERIFICAR DE NUEVO POR LA PÉRDIDA DE DATOS EN LA ASIGNACIÓN DE CUENTA CONTABLE';
+function rcvLista(e){return (e.rcvData&&e.rcvData.length)?e.rcvData:parseRCV(e.rcvTxt||'').filter(function(r){return r.estado==='CONSOLIDADO';});}
+function rcvPorVerificar(e,i,r){
+  var ov=e.rcvOverrides||{};if(ov[i])return false;
+  var lk=nitLookup(r.nit);return !(lk&&lk.cuenta);
+}
+function rcvVerificarIdx(e){
+  if(!e)return [];var out=[];
+  rcvLista(e).forEach(function(r,i){if(rcvPorVerificar(e,i,r))out.push(i);});
+  return out;
+}
+function rcvConfirmar(idx,code){
+  var e=emp();if(!e.rcvOverrides)e.rcvOverrides={};
+  e.rcvOverrides[idx]=code;saveLS();re();
+}
+function rcvConfirmarTodas(){
+  var e=emp(),l=rcvVerificarIdx(e),arr=rcvLista(e);if(!l.length)return;
+  if(!confirm('¿Confirmar que las '+l.length+' facturas marcadas están bien con la cuenta que muestran ahora?\n\nHazlo solo si ya las comparaste con lo declarado a Impuestos.'))return;
+  if(!e.rcvOverrides)e.rcvOverrides={};
+  l.forEach(function(i){var r=arr[i];e.rcvOverrides[i]=(CAT_MAP[(r.cat||'').trim()]||'526002001');});
+  saveLS();re();showNotif('✓ '+l.length+' facturas confirmadas');
+}
+function cxAvisoVerificar(){
+  try{
+    var e=emp();if(!e||!S.nits||!S.nits.length)return '';
+    var n=rcvVerificarIdx(e).length;if(!n)return '';
+    return '<div class="info" style="background:#FDECEA;border:1.5px solid #F4B8B2;color:#B42318;font-size:12px;margin-bottom:10px">⚠️ <strong>'+CX_MSG_VERIFICAR+'.</strong><br>'+
+      n+' factura'+(n>1?'s':'')+' de compras de esta empresa tiene'+(n>1?'n':'')+' la cuenta general porque su NIT no tiene cuenta asignada. Compáralas con lo declarado a Impuestos. '+
+      (S.tab!=='rcv'?'<a href="#" onclick="S.tab=\'rcv\';re();return false" style="color:#B42318;font-weight:700">Ver en RCV Compras →</a>':'')+
+      (e.cfg&&e.cfg.terminado?'<br>Mientras haya facturas por verificar, este balance finalizado <strong>no se congela</strong>.':'')+'</div>';
+  }catch(x){return '';}
+}
 // Balances que ya estaban finalizados antes de V3.41: se congelan la primera vez que se abren.
 function cxAutoCongelar(){
   try{
     var e=emp();if(!e||!e.cfg||!e.cfg.terminado||e.congelado)return;
     if(fbDb&&window._cxEmpNube!==e.id)return; // esperar a que la empresa llegue de la nube
+    if(!S.nits||!S.nits.length||rcvVerificarIdx(e).length)return; // V3.42: no congelar si hay facturas por verificar
     if(congelarBalance(e))saveLS();
   }catch(x){}
 }
@@ -1156,6 +1197,8 @@ function finalizarActual(){
   var e=emp();if(!e||!e.cfg)return;
   var done=!!e.cfg.terminado;
   if(!done){
+    var _pv=rcvVerificarIdx(e).length;
+    if(_pv&&!confirm('⚠️ '+CX_MSG_VERIFICAR+'\n\nHay '+_pv+' facturas de compras con la cuenta general (su NIT no tiene cuenta asignada).\n¿Finalizar y congelar el balance de todas formas?'))return;
     if(!confirm('¿Deseas dar por TERMINADO el Estado Financiero de "'+(e.cfg.razonSocial||'esta empresa')+'"?\n\nSe mostrará como Finalizado en Gestión Multi-Empresa. Podrás reabrirlo cuando quieras.'))return;
   }else{
     if(!confirm('Este Estado Financiero está marcado como FINALIZADO.\n¿Deseas reabrirlo (volver a En Curso)?'))return;
@@ -1747,8 +1790,14 @@ function nitLookup(nit){
   if(c&&c.nits&&Object.prototype.hasOwnProperty.call(c.nits,String(nit)))return c.nits[String(nit)]||undefined;
   return nitLookupGlobal(nit);
 }
+var _nitIdx=null,_nitIdxRef=null,_nitIdxSig='';
 function nitLookupGlobal(nit){
-  return (S.nits||[]).find(n=>String(n.nit)===String(nit));
+  var l=S.nits||[];
+  var sig=l.length+'|'+(l.length?String(l[0].nit)+String(l[0].cuenta)+String(l[l.length-1].nit)+String(l[l.length-1].cuenta):'');
+  if(_nitIdxRef!==l||_nitIdxSig!==sig){_nitIdx=new Map();for(var i=l.length-1;i>=0;i--)_nitIdx.set(String(l[i].nit),l[i]);_nitIdxRef=l;_nitIdxSig=sig;}
+  var hit=_nitIdx.get(String(nit));
+  if(hit&&String(hit.nit)===String(nit))return hit;
+  return l.find(n=>String(n.nit)===String(nit));
 }
 
 function buildM(entries){
@@ -2386,7 +2435,9 @@ function filterVentasInPlace(v){_venFilter=v;var q=v.toLowerCase();Array.from(do
 function renderRCV(){
   var _cg=cxCongelado();
   var _avisoCg=_cg?'<div class="info ig" style="margin-bottom:10px">🔒 <strong>Balance finalizado:</strong> las cuentas de los NITs y las UFVs quedaron guardadas el '+new Date(_cg.fecha).toLocaleDateString('es-BO')+'. Los cambios en la lista general de NITs o UFVs ya no lo modifican. Para cambiarlo, reábrelo con el botón FINALIZAR.</div>':'';
-  return _avisoCg+renderRCVBody();
+  var _nv=rcvVerificarIdx(emp()).length;
+  var _btnTodas=_nv?'<div style="margin:-4px 0 10px"><button class="btn-del" style="font-size:11px;padding:4px 10px" onclick="rcvConfirmarTodas()">Ya las revisé: confirmar las '+_nv+' facturas marcadas</button> <span style="font-size:11px;color:#557363">O corrige cada una eligiendo su cuenta (también puedes asignarla al NIT para todas las empresas).</span></div>':'';
+  return _avisoCg+_btnTodas+renderRCVBody();
 }
 function renderRCVBody(){
   const rcvFromFile=emp().rcvData||[];
@@ -2403,6 +2454,7 @@ function renderRCVBody(){
     const lk=nitLookup(r.nit);
     const autoCode=lk?lk.cuenta:(CAT_MAP[r.cat?.trim()]||'526002001');
     const isOver=!!overrides[idx];
+    const porVer=!isOver&&!(lk&&lk.cuenta);
     const finalCode=overrides[idx]||autoCode;
     rcvAccts[finalCode]=acctName(finalCode);
     const sdId='rc'+idx;
@@ -2418,7 +2470,8 @@ function renderRCVBody(){
       '<td style="font-size:10px">'+(r.fecha||'')+'</td>'+
       '<td class="r">'+fmt(r.total)+'</td>'+
       '<td class="r">'+fmt(r.cf)+'</td>'+
-      '<td style="'+cellSt+'">'+
+      '<td style="'+cellSt+(porVer?';background:#FDECEA;outline:1.5px solid #F4B8B2':'')+'">'+
+        (porVer?'<div style="font-size:9px;color:#B42318;font-weight:700;margin-bottom:2px">⚠️ VERIFICAR DE NUEVO (pérdida de asignación) <button onclick="rcvConfirmar('+idx+',\''+finalCode+'\')" style="font-size:9px;color:#B42318;background:none;border:1px solid #B42318;border-radius:4px;cursor:pointer;padding:0 4px">Confirmar</button></div>':'')+
         (isOver?'<div style="font-size:9px;color:var(--nm-aviso,#93370D);font-weight:700;margin-bottom:1px"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.14em;margin-right:4px"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg> MANUAL</div>':'')+
         sdMake(sdId,finalCode,'rcSet',false,'G')+
         (isOver?'<button onclick="delete emp().rcvOverrides['+idx+'];saveLS();re()" style="font-size:9px;color:var(--nm-aviso,#93370D);background:none;border:none;cursor:pointer"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.14em;margin-right:4px"><path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.3M3 4v5h5"/></svg> Restaurar</button>':'')+
@@ -7636,6 +7689,7 @@ function re(){
     else if(S.tab==='usuarios')main=renderUsuarios();
     else if(S.tab==='iaapi')main=renderIAApi(c);
     else main='<div class="card"><p>Pestaña: '+S.tab+'</p></div>';
+    if(['plan','nits','ufvs','vidautil','listaeeff','historial','usuarios','iaapi'].indexOf(S.tab)<0)main=cxAvisoVerificar()+main;
   }catch(err){
     main='<div class="card" style="color:var(--nm-error,#B42318)"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.14em;margin-right:4px"><path d="M18 6L6 18M6 6l12 12"/></svg> Error en '+S.tab+': '+err.message+'</div>';
     console.error('Tab error',S.tab,err);
