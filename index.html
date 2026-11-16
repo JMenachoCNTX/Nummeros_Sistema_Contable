@@ -347,8 +347,12 @@ body.dark-mode svg rect[fill="#163832"],body.dark-mode svg rect[fill="#235347"]{
 // VERSIÓN DEL SISTEMA — Única fuente de verdad
 // Al aprobar una versión: subir VERSION y agregar una entrada al inicio de CHANGELOG.
 // ══════════════════════════════════════════════════════════
-const VERSION='V3.42';
+const VERSION='V3.43';
 const CHANGELOG=[
+  {v:'V3.43', fecha:'2026-11-16', cambios:[
+    'Cuando un balance cuadra (Balance General, Sumas y Saldos y Flujo) y no tiene facturas por verificar, aparece el aviso "Este balance cuadra y no tiene pendientes" con botón FINALIZAR. No se finaliza solo.',
+    'El botón "Todavía no" oculta el aviso de esa empresa en este equipo.'
+  ]},
   {v:'V3.42', fecha:'2026-11-16', cambios:[
     'Aviso "VERIFICAR DE NUEVO POR LA PÉRDIDA DE DATOS EN LA ASIGNACIÓN DE CUENTA CONTABLE" en las empresas con facturas de compras cuyo NIT no tiene cuenta asignada (quedaron en la cuenta general).',
     'En RCV Compras esas facturas se marcan en rojo, con botón Confirmar por factura o para todas.',
@@ -1166,6 +1170,26 @@ function cxAvisoVerificar(){
       n+' factura'+(n>1?'s':'')+' de compras de esta empresa tiene'+(n>1?'n':'')+' la cuenta general porque su NIT no tiene cuenta asignada. Compáralas con lo declarado a Impuestos. '+
       (S.tab!=='rcv'?'<a href="#" onclick="S.tab=\'rcv\';re();return false" style="color:#B42318;font-weight:700">Ver en RCV Compras →</a>':'')+
       (e.cfg&&e.cfg.terminado?'<br>Mientras haya facturas por verificar, este balance finalizado <strong>no se congela</strong>.':'')+'</div>';
+  }catch(x){return '';}
+}
+// ═══ V3.43: SUGERIR FINALIZAR cuando el balance cuadra y no tiene pendientes ═══
+// No finaliza solo: el contador decide (cuadrar no significa que ya se declaró a Impuestos).
+function cxListoParaFinalizar(e,c){
+  if(!e||!e.cfg||e.cfg.terminado||!c)return false;
+  if(!(c.tA>0))return false;                                    // empresa sin datos
+  if(!c.bgOK||r2(c.ssTSD-c.ssTSH)!==0||!c.fOK)return false;     // BG, Sumas y Saldos y Flujo cuadrados
+  if(!S.nits||!S.nits.length)return false;
+  return rcvVerificarIdx(e).length===0;                         // sin facturas por verificar
+}
+function cxAvisoFinalizar(c){
+  try{
+    if(['dashboard','ee','verificaciones','comprobantes','reporte','notas'].indexOf(S.tab)<0)return '';
+    var e=emp();if(!cxListoParaFinalizar(e,c))return '';
+    try{if(localStorage.getItem('nosug_'+e.id))return '';}catch(x){}
+    return '<div class="info ig" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:12px">'+
+      '<span style="flex:1;min-width:200px">✅ <strong>Este balance cuadra y no tiene pendientes.</strong> ¿Ya fue declarado a Impuestos? Si es así, finalízalo para que quede congelado.</span>'+
+      '<button class="btn-green" style="font-size:12px;padding:5px 12px" onclick="finalizarActual()">FINALIZAR</button>'+
+      '<button style="font-size:11px;padding:5px 10px;background:none;border:1px solid var(--nm-borde,#DAF1DE);border-radius:6px;cursor:pointer" onclick="try{localStorage.setItem(\'nosug_'+e.id+'\',\'1\')}catch(x){};re()">Todavía no</button></div>';
   }catch(x){return '';}
 }
 // Balances que ya estaban finalizados antes de V3.41: se congelan la primera vez que se abren.
@@ -7689,7 +7713,7 @@ function re(){
     else if(S.tab==='usuarios')main=renderUsuarios();
     else if(S.tab==='iaapi')main=renderIAApi(c);
     else main='<div class="card"><p>Pestaña: '+S.tab+'</p></div>';
-    if(['plan','nits','ufvs','vidautil','listaeeff','historial','usuarios','iaapi'].indexOf(S.tab)<0)main=cxAvisoVerificar()+main;
+    if(['plan','nits','ufvs','vidautil','listaeeff','historial','usuarios','iaapi'].indexOf(S.tab)<0)main=cxAvisoVerificar()+cxAvisoFinalizar(c)+main;
   }catch(err){
     main='<div class="card" style="color:var(--nm-error,#B42318)"><svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.14em;margin-right:4px"><path d="M18 6L6 18M6 6l12 12"/></svg> Error en '+S.tab+': '+err.message+'</div>';
     console.error('Tab error',S.tab,err);
